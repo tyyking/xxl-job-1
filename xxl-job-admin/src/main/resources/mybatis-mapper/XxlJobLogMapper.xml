@@ -43,10 +43,11 @@
 		t.handle_msg,
 		t.alarm_status
 	</sql>
-	
+	<sql id='XXL_JOB_LOG_ID'>XXL_JOB_LOG_ID.NEXTVAL</sql>		
 	<select id="pageList" resultMap="XxlJobLog">
-		SELECT <include refid="Base_Column_List" />
-		FROM xxl_job_log AS t
+		select *  from (
+		SELECT row_number() over(ORDER BY t.trigger_time DESC) r,<include refid="Base_Column_List" />
+		FROM xxl_job_log  t
 		<trim prefix="WHERE" prefixOverrides="AND | OR" >
 			<if test="jobId==0 and jobGroup gt 0">
 				AND t.job_group = #{jobGroup}
@@ -55,10 +56,10 @@
 				AND t.job_id = #{jobId}
 			</if>
 			<if test="triggerTimeStart != null">
-				AND t.trigger_time <![CDATA[ >= ]]> #{triggerTimeStart}
+				AND t.trigger_time <![CDATA[ >= ]]> #{triggerTimeStart,jdbcType=DATE}
 			</if>
 			<if test="triggerTimeEnd != null">
-				AND t.trigger_time <![CDATA[ <= ]]> #{triggerTimeEnd}
+				AND t.trigger_time <![CDATA[ <= ]]> #{triggerTimeEnd,jdbcType=DATE}
 			</if>
 			<if test="logStatus == 1" >
 				AND t.handle_code = 200
@@ -73,14 +74,13 @@
 				AND t.trigger_code = 200
 				AND t.handle_code = 0
 			</if>
-		</trim>
-		ORDER BY t.trigger_time DESC
-		LIMIT #{offset}, #{pagesize}
+		) where r between #{offset}+1 and #{offset}+#{pagesize}
+		</trim>		
 	</select>
 	
 	<select id="pageListCount" resultType="int">
 		SELECT count(1)
-		FROM xxl_job_log AS t
+		FROM xxl_job_log  t
 		<trim prefix="WHERE" prefixOverrides="AND | OR" >
 			<if test="jobId==0 and jobGroup gt 0">
 				AND t.job_group = #{jobGroup}
@@ -89,10 +89,10 @@
 				AND t.job_id = #{jobId}
 			</if>
 			<if test="triggerTimeStart != null">
-				AND t.trigger_time <![CDATA[ >= ]]> #{triggerTimeStart}
+				AND t.trigger_time <![CDATA[ >= ]]> #{triggerTimeStart,jdbcType=DATE}
 			</if>
 			<if test="triggerTimeEnd != null">
-				AND t.trigger_time <![CDATA[ <= ]]> #{triggerTimeEnd}
+				AND t.trigger_time <![CDATA[ <= ]]> #{triggerTimeEnd,jdbcType=DATE}
 			</if>
 			<if test="logStatus == 1" >
 				AND t.handle_code = 200
@@ -112,25 +112,30 @@
 	
 	<select id="load" parameterType="java.lang.Long" resultMap="XxlJobLog">
 		SELECT <include refid="Base_Column_List" />
-		FROM xxl_job_log AS t
+		FROM xxl_job_log  t
 		WHERE t.id = #{id}
 	</select>
 
 	
 	<insert id="save" parameterType="com.xxl.job.admin.core.model.XxlJobLog" useGeneratedKeys="true" keyProperty="id" >
+        <selectKey keyProperty="id" resultType="int" order="BEFORE">
+            select <include refid="XXL_JOB_LOG_ID" /> from dual
+        </selectKey>
 		INSERT INTO xxl_job_log (
-			`job_group`,
-			`job_id`,
-			`trigger_time`,
-			`trigger_code`,
-			`handle_code`
+		    id,
+			job_group,
+			job_id,
+			trigger_time,
+			trigger_code,
+			handle_code
 		) VALUES (
+		    #{id},
 			#{jobGroup},
 			#{jobId},
-			#{triggerTime},
+			#{triggerTime,jdbcType=DATE},
 			#{triggerCode},
 			#{handleCode}
-		);
+		)
 		<!--<selectKey resultType="java.lang.Integer" order="AFTER" keyProperty="id">
 			SELECT LAST_INSERT_ID() 
 		</selectKey>-->
@@ -139,24 +144,24 @@
 	<update id="updateTriggerInfo" >
 		UPDATE xxl_job_log
 		SET
-			`trigger_time`= #{triggerTime},
-			`trigger_code`= #{triggerCode},
-			`trigger_msg`= #{triggerMsg},
-			`executor_address`= #{executorAddress},
-			`executor_handler`=#{executorHandler},
-			`executor_param`= #{executorParam},
-			`executor_sharding_param`= #{executorShardingParam},
-			`executor_fail_retry_count`= #{executorFailRetryCount}
-		WHERE `id`= #{id}
+			trigger_time= #{triggerTime,jdbcType=DATE},
+			trigger_code= #{triggerCode},
+			trigger_msg= #{triggerMsg,jdbcType=CLOB},
+			executor_address= #{executorAddress,jdbcType=VARCHAR},
+			executor_handler=#{executorHandler,jdbcType=VARCHAR},
+			executor_param= #{executorParam,jdbcType=VARCHAR},
+			executor_sharding_param= #{executorShardingParam,jdbcType=VARCHAR},
+			executor_fail_retry_count= #{executorFailRetryCount}
+		WHERE id= #{id}
 	</update>
 
 	<update id="updateHandleInfo">
 		UPDATE xxl_job_log
 		SET 
-			`handle_time`= #{handleTime}, 
-			`handle_code`= #{handleCode},
-			`handle_msg`= #{handleMsg} 
-		WHERE `id`= #{id}
+			handle_time= #{handleTime,jdbcType=DATE}, 
+			handle_code= #{handleCode},
+			handle_msg= #{handleMsg,jdbcType=CLOB} 
+		WHERE id= #{id}
 	</update>
 	
 	<delete id="delete" >
@@ -166,7 +171,7 @@
 
 	<select id="triggerCountByHandleCode" resultType="int" >
 		SELECT count(1)
-		FROM xxl_job_log AS t
+		FROM xxl_job_log  t
 		<trim prefix="WHERE" prefixOverrides="AND | OR" >
 			<if test="handleCode gt 0">
 				AND t.handle_code = #{handleCode}
@@ -176,14 +181,14 @@
 
     <select id="triggerCountByDay" resultType="java.util.Map" >
 		SELECT
-			DATE_FORMAT(trigger_time,'%Y-%m-%d') triggerDay,
+			to_char(trigger_time,'yyyy-mm-dd') triggerDay,
 			COUNT(handle_code) triggerDayCount,
 			SUM(CASE WHEN (trigger_code in (0, 200) and handle_code = 0) then 1 else 0 end) as triggerDayCountRunning,
 			SUM(CASE WHEN handle_code = 200 then 1 else 0 end) as triggerDayCountSuc
 		FROM xxl_job_log
 		WHERE trigger_time BETWEEN #{from} and #{to}
-		GROUP BY triggerDay
-		ORDER BY triggerDay
+		GROUP BY to_char(trigger_time,'yyyy-mm-dd')
+		ORDER BY to_char(trigger_time,'yyyy-mm-dd')
     </select>
 
 	<delete id="clearLog" >
@@ -196,12 +201,12 @@
 				AND job_id = #{jobId}
 			</if>
 			<if test="clearBeforeTime != null">
-				AND trigger_time <![CDATA[ <= ]]> #{clearBeforeTime}
+				AND trigger_time <![CDATA[ <= ]]> #{clearBeforeTime,jdbcType=DATE}
 			</if>
 			<if test="clearBeforeNum gt 0">
 				AND id NOT in(
 					SELECT id FROM(
-						SELECT id FROM xxl_job_log AS t
+						SELECT id FROM xxl_job_log  t
 						<trim prefix="WHERE" prefixOverrides="AND | OR" >
 							<if test="jobGroup gt 0">
 								AND t.job_group = #{jobGroup}
@@ -211,29 +216,28 @@
 							</if>
 						</trim>
 						ORDER BY t.trigger_time desc
-						LIMIT 0, #{clearBeforeNum}
-					) t1
+					) t1  WHERE ROWNUM <![CDATA[ < ]]> #{clearBeforeNum}
 				)
 			</if>
 		</trim>
 	</delete>
 
 	<select id="findFailJobLogIds" resultType="long" >
-		SELECT id FROM `xxl_job_log`
-		WHERE !(
+		SELECT id FROM xxl_job_log
+		WHERE not (
 			(trigger_code in (0, 200) and handle_code = 0)
 			OR
 			(handle_code = 200)
 		)
-		AND `alarm_status` = 0
-		ORDER BY id ASC
+		AND alarm_status = 0
+		ORDER BY id 
 	</select>
 
 	<update id="updateAlarmStatus" >
 		UPDATE xxl_job_log
 		SET
-			`alarm_status` = #{newAlarmStatus}
-		WHERE `id`= #{logId} AND `alarm_status` = #{oldAlarmStatus}
+			alarm_status = #{newAlarmStatus}
+		WHERE id= #{logId} AND alarm_status = #{oldAlarmStatus}
 	</update>
 	
 </mapper>

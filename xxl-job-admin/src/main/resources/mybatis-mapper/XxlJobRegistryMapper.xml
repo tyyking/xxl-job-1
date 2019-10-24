@@ -18,45 +18,39 @@
 		t.registry_value,
 		t.update_time
 	</sql>
-
-	<select id="findDead" parameterType="java.lang.Integer" resultType="java.lang.Integer" >
-		SELECT t.id
-		FROM xxl_job_registry AS t
-		WHERE t.update_time <![CDATA[ < ]]> DATE_ADD(NOW(),INTERVAL -#{timeout} SECOND)
-	</select>
-	
+	<sql id='XXL_JOB_REGISTRY_ID'>XXL_JOB_REGISTRY_ID.NEXTVAL</sql>		
 	<delete id="removeDead" parameterType="java.lang.Integer" >
 		DELETE FROM xxl_job_registry
-		WHERE id in
-		<foreach collection="ids" item="item" open="(" close=")" separator="," >
-			#{item}
-		</foreach>
+		WHERE update_time <![CDATA[ < ]]> sysdate+numtodsinterval(-#{timeout},'second')
 	</delete>
 
 	<select id="findAll" parameterType="java.lang.Integer" resultMap="XxlJobRegistry">
 		SELECT <include refid="Base_Column_List" />
-		FROM xxl_job_registry AS t
-		WHERE t.update_time <![CDATA[ > ]]> DATE_ADD(NOW(),INTERVAL -#{timeout} SECOND)
+		FROM xxl_job_registry  t
+		WHERE t.update_time <![CDATA[ > ]]> sysdate+numtodsinterval(-#{timeout},'second')
 	</select>
 
     <update id="registryUpdate" >
         UPDATE xxl_job_registry
-        SET `update_time` = NOW()
-        WHERE `registry_group` = #{registryGroup}
-          AND `registry_key` = #{registryKey}
-          AND `registry_value` = #{registryValue}
+        SET update_time = sysdate
+        WHERE registry_group = #{registryGroup,jdbcType=VARCHAR}
+          AND registry_key = #{registryKey,jdbcType=VARCHAR}
+          AND registry_value = #{registryValue,jdbcType=VARCHAR}
     </update>
 
     <insert id="registrySave" >
-        INSERT INTO xxl_job_registry( `registry_group` , `registry_key` , `registry_value`, `update_time`)
-        VALUES( #{registryGroup}  , #{registryKey} , #{registryValue}, NOW())
+        <selectKey keyProperty="id" resultType="int" order="BEFORE">
+            select <include refid="XXL_JOB_REGISTRY_ID" /> from dual
+        </selectKey>
+        INSERT INTO xxl_job_registry( id,registry_group , registry_key , registry_value, update_time)
+        VALUES( #{id},#{registryGroup,jdbcType=VARCHAR}  , #{registryKey,jdbcType=VARCHAR} , #{registryValue,jdbcType=VARCHAR}, sysdate)
     </insert>
 
 	<delete id="registryDelete" >
 		DELETE FROM xxl_job_registry
-		WHERE registry_group = #{registryGroup}
-			AND registry_key = #{registryKey}
-			AND registry_value = #{registryValue}
+		WHERE registry_group = #{registryGroup,jdbcType=VARCHAR}
+			AND registry_key = #{registryKey,jdbcType=VARCHAR}
+			AND registry_value = #{registryValue,jdbcType=VARCHAR}
 	</delete>
 
 </mapper>
